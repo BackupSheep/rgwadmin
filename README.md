@@ -1,8 +1,10 @@
-# rgwadmin
+# aiorgwadmin
 
 [![Documentation Status](https://readthedocs.org/projects/rgwadmin/badge/?version=latest)](https://rgwadmin.readthedocs.io/en/latest/?badge=latest)
 
-rgwadmin is a Python library to access the Ceph Object Storage Admin API.
+aiorgwadmin is fork of rgwadmin library.
+
+aiorgwadmin is an async Python library to access the Ceph Object Storage Admin API.
 
 http://docs.ceph.com/docs/master/radosgw/adminops/
 
@@ -10,39 +12,51 @@ http://docs.ceph.com/docs/master/radosgw/adminops/
 ## API Example Usage
 
 ```python
-from rgwadmin import RGWAdmin
+import asyncio
+from aiorgwadmin import RGWAdmin
 
-rgw = RGWAdmin(access_key='XXX', secret_key='XXX', server='obj.example.com')
-rgw.create_user(
-    uid='liam',
-    display_name='Liam Monahan',
-    email='liam@umiacs.umd.edu',
-    user_caps='usage=read, write; users=read',
-    max_buckets=1000)
-rgw.set_user_quota(
-    uid='liam',
-    quota_type='user',
-    max_size_kb=1024*1024,
-    enabled=True)
-rgw.remove_user(uid='liam', purge_data=True)
+async def main():
+    rgw = RGWAdmin(access_key='XXX', secret_key='XXX', server='obj.example.com')
+    await rgw.create_user(
+        uid='liam',
+        display_name='Liam Monahan',
+        email='liam@umiacs.umd.edu',
+        user_caps='usage=read, write; users=read',
+        max_buckets=1000)
+    await rgw.set_user_quota(
+        uid='liam',
+        quota_type='user',
+        max_size_kb=1024 * 1024,
+        enabled=True)
+    await rgw.remove_user(uid='liam', purge_data=True)
+
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
 ```
 
 ## User Example Usage
-```python
-from rgwadmin import RGWAdmin, RGWUser
 
-RGWAdmin.connect(access_key='XXX', secret_key='XXX', server='obj.example.com')
-u = RGWUser.create(user_id='test', display_name='Test User')
-u.user_quota.size = 1024 * 1024  # in bytes
-u.user_quota.enabled = True
-u.save()
-u.delete()
+```python
+import asyncio
+from aiorgwadmin import RGWAdmin, RGWUser
+
+async def main():
+    RGWAdmin.connect(access_key='XXX', secret_key='XXX', server='obj.example.com')
+    u = await RGWUser.create(user_id='test', display_name='Test User')
+    u.user_quota.size = 1024 * 1024  # in bytes
+    u.user_quota.enabled = True
+    await u.save()
+    await u.delete()
+
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
 ```
 
 ## Requirements
 
-rgwadmin requires the following Python packages:
+aiorgwadmin requires the following Python packages:
 
+ * [aiohttp](https://docs.aiohttp.org)
  * [requests](http://python-requests.org/)
  * [requests-aws](https://github.com/tax/python-requests-aws)
 
@@ -52,15 +66,13 @@ the API that you want to access.  See the
 [Ceph Object Storage](http://docs.ceph.com/docs/master/radosgw/) page for more
 information.
 
-Version 2.3.1 was the last to support Python 2.
-
 ### Compatibility
-rgwadmin implements all documented Admin API operations or recent versions of
+aiorgwadmin implements all documented Admin API operations or recent versions of
 Ceph.  We also implement some of the undocumented ones, too...
 
 ## Installation
 
-```pip install rgwadmin```
+```pip install aiorgwadmin```
 
 
 ## License

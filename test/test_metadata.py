@@ -3,66 +3,69 @@
 import json
 import logging
 import unittest
+import uuid
 from urllib.parse import quote
 
-import rgwadmin
-from rgwadmin.utils import get_environment_creds, id_generator
-from . import create_bucket
+import aiorgwadmin
+from . import create_bucket, get_environment_creds
 
 logging.basicConfig(level=logging.WARNING)
 
 
-class MetadataTest(unittest.TestCase):
+class MetadataTest(unittest.IsolatedAsyncioTestCase):
 
-    def setUp(self):
-        self.rgw = rgwadmin.RGWAdmin(secure=False, verify=False,
-                                     **get_environment_creds())
-        rgwadmin.RGWAdmin.set_connection(self.rgw)
+    async def asyncSetUp(self):
+        self.rgw = aiorgwadmin.RGWAdmin(**get_environment_creds())
+        aiorgwadmin.RGWAdmin.set_connection(self.rgw)
 
-    def test_get_metadata(self):
-        bucket_name = id_generator()
-        self.assertTrue(bucket_name not in self.rgw.get_metadata('bucket'))
-        create_bucket(self.rgw, bucket=bucket_name)
-        self.assertTrue(bucket_name in self.rgw.get_metadata('bucket'))
-        self.rgw.remove_bucket(bucket=bucket_name, purge_objects=True)
+        self.user = f"user-{uuid.uuid4()}"
+        await self.rgw.create_user(uid=self.user, display_name=f"Unit Test {self.user}")
 
-    def test_put_metadata(self):
-        bucket_name = id_generator()
-        self.assertTrue(bucket_name not in self.rgw.get_metadata('bucket'))
-        create_bucket(self.rgw, bucket=bucket_name)
+    async def asyncTearDown(self):
+        await self.rgw.remove_user(uid=self.user, purge_data=True)
 
-        ret_json = self.rgw.get_metadata('bucket', key=bucket_name)
+    async def test_get_metadata(self):
+        bucket_name = f"bucket-{uuid.uuid4()}"
+        self.assertTrue(bucket_name not in await self.rgw.get_metadata('bucket'))
+
+        await create_bucket(bucket_name, owner=self.user)
+        self.assertTrue(bucket_name in await self.rgw.get_metadata('bucket'))
+
+    async def test_put_metadata(self):
+        bucket_name = f"bucket-{uuid.uuid4()}"
+        await create_bucket(bucket_name, owner=self.user)
+
+        ret_json = await self.rgw.get_metadata('bucket', key=bucket_name)
         self.assertEqual(ret_json['data']['bucket']['name'], bucket_name)
         json_str = json.dumps(ret_json)
 
-        self.rgw.put_metadata('bucket', key=bucket_name, json_string=json_str)
-        self.rgw.remove_bucket(bucket=bucket_name, purge_objects=True)
+        await self.rgw.put_metadata('bucket', key=bucket_name, json_string=json_str)
 
-    def test_metadata_lock_unlock(self):
-        bucket_name = id_generator()
-        create_bucket(self.rgw, bucket=bucket_name)
-        self.rgw.lock_metadata('bucket', key=bucket_name, lock_id='abc',
-                               length=5)
-        self.rgw.unlock_metadata('bucket', key=bucket_name, lock_id='abc')
-        self.rgw.remove_bucket(bucket=bucket_name, purge_objects=True)
+    async def test_metadata_lock_unlock(self):
+        bucket_name = f"bucket-{uuid.uuid4()}"
+        await create_bucket(bucket_name, owner=self.user)
 
-    def test_invalid_metadata_unlock(self):
-        with self.assertRaises(rgwadmin.exceptions.NoSuchKey):
-            key = id_generator()
-            self.rgw.unlock_metadata('bucket', key=key, lock_id='abc')
+        await self.rgw.lock_metadata('bucket', key=bucket_name, lock_id='abc',
+                                     length=5)
+        await self.rgw.unlock_metadata('bucket', key=bucket_name, lock_id='abc')
 
-    def test_metadata_type_valid(self):
+    async def test_invalid_metadata_unlock(self):
+        with self.assertRaises(aiorgwadmin.exceptions.NoSuchKey):
+            key = f"bucket-{uuid.uuid4()}"
+            await self.rgw.unlock_metadata('bucket', key=key, lock_id='abc')
+
+    async def test_metadata_type_valid(self):
         with self.assertRaises(Exception):
-            self.rgw.get_metadata('bucketttt')
+            await self.rgw.get_metadata('bucketttt')
 
-    def test_get_bucket_instances(self):
-        bucket_name = id_generator()
-        create_bucket(self.rgw, bucket=bucket_name)
-        instances = self.rgw.get_bucket_instances()
-        bucket = self.rgw.get_bucket(bucket_name)
+    async def test_get_bucket_instances(self):
+        bucket_name = f"bucket-{uuid.uuid4()}"
+        await create_bucket(bucket_name, owner=self.user)
+
+        instances = await self.rgw.get_bucket_instances()
+        bucket = await self.rgw.get_bucket(bucket_name)
         expected_instance = '%s:%s' % (bucket_name, bucket['id'])
         self.assertTrue(expected_instance in instances)
-        self.rgw.remove_bucket(bucket=bucket_name, purge_objects=True)
 
     def test_metadata_marker(self):
         self.assertEqual('default.345%20-5', quote('default.345 -5'))

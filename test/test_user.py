@@ -1,48 +1,54 @@
 #!/usr/bin/env python
 
 import logging
-import rgwadmin
 import unittest
-from rgwadmin.utils import get_environment_creds, id_generator
-from rgwadmin.user import RGWUser
+import uuid
+
+import aiorgwadmin
+from aiorgwadmin.user import RGWUser
+from . import get_environment_creds
 
 logging.basicConfig(level=logging.WARNING)
 
 
-class RGWUserTest(unittest.TestCase):
+class RGWUserTest(unittest.IsolatedAsyncioTestCase):
 
-    def setUp(self):
-        rgw = rgwadmin.RGWAdmin(secure=False, verify=False,
-                                **get_environment_creds())
-        rgwadmin.RGWAdmin.set_connection(rgw)
+    async def asyncSetUp(self):
+        self.rgw = aiorgwadmin.RGWAdmin(**get_environment_creds())
+        aiorgwadmin.RGWAdmin.set_connection(self.rgw)
 
-    def test_create_user(self):
-        user_id = id_generator()
-        display_name = id_generator(25)
-        u = RGWUser.create(user_id=user_id, display_name=display_name)
-        self.assertTrue(u.user_id == user_id and
+        self.user = f"user-{uuid.uuid4()}"
+
+    async def asyncTearDown(self):
+        users = await self.rgw.get_users()
+
+        if self.user in users:
+            await self.rgw.remove_user(uid=self.user, purge_data=True)
+
+    async def test_create_user(self):
+        display_name = f"Test Create User"
+        u = await RGWUser.create(user_id=self.user, display_name=display_name)
+        self.assertTrue(u.user_id == self.user and
                         u.display_name == display_name)
-        u.delete()
+        await u.delete()
 
-    def test_user_exists(self):
-        user_id = id_generator()
-        display_name = id_generator(25)
-        u = RGWUser.create(user_id=user_id, display_name=display_name)
-        self.assertTrue(u.exists())
-        u.delete()
-        self.assertFalse(u.exists())
-        u.save()
-        self.assertTrue(u.exists())
+    async def test_user_exists(self):
+        display_name = "Test User Exists"
+        u = await RGWUser.create(user_id=self.user, display_name=display_name)
+        self.assertTrue(await u.exists())
+        await u.delete()
+        self.assertFalse(await u.exists())
+        await u.save()
+        self.assertTrue(await u.exists())
 
-    def test_set_quota(self):
-        user_id = id_generator()
-        display_name = id_generator(25)
-        u = RGWUser.create(user_id=user_id, display_name=display_name)
+    async def test_set_quota(self):
+        display_name = "Test Set Quota"
+        u = await RGWUser.create(user_id=self.user, display_name=display_name)
         u.user_quota.size = 1024000
-        u.save()
-        nu = RGWUser.fetch(u.user_id)
+        await u.save()
+        nu = await RGWUser.fetch(u.user_id)
         self.assertTrue(u.user_quota.size == nu.user_quota.size)
-        nu.delete()
+        await nu.delete()
 
 
 if __name__ == '__main__':
